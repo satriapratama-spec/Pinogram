@@ -63,7 +63,7 @@ def index():
 # Endpoint Minta OTP Berdasarkan Token yang Diinput User
 @app.route("/api/request-login-otp", methods=["POST"])
 def request_login_otp():
-    data = request.get_json()
+    data = request.get_json() or {}
     token = data.get("token", "").strip()
     
     if not token:
@@ -94,7 +94,7 @@ def resend_otp():
 # Verifikasi OTP yang diinput user
 @app.route("/api/verify-login-otp", methods=["POST"])
 def verify_login_otp():
-    data = request.get_json()
+    data = request.get_json() or {}
     otp_input = data.get("otp", "").strip()
 
     conn = sqlite3.connect(DB_NAME)
@@ -108,10 +108,10 @@ def verify_login_otp():
 
     return jsonify({"status": "failed", "message": "Kode OTP salah!"}), 400
 
-# Webhook Telegram (Gunakan token default atau dinamis)
+# Webhook Telegram
 @app.route(f"/webhook/{DEFAULT_BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
-    data = request.get_json()
+    data = request.get_json() or {}
     if "message" in data:
         msg = data["message"]
         chat = msg["chat"]
@@ -151,11 +151,11 @@ def get_messages(chat_id):
     c.execute("SELECT text, direction, timestamp, sender_name, is_otp FROM messages WHERE chat_id = ? ORDER BY id ASC", (chat_id,))
     rows = c.fetchall()
     conn.close()
-    return jsonify([{"text": r[0], "direction": r[1], "time": r[2], "sender": r[3], "is_otp": r[4]} for r.upper() == 'OUT' else {"text": r[0], "direction": r[1], "time": r[2], "sender": r[3], "is_otp": r[4]} for r in rows])
+    return jsonify([{"text": r[0], "direction": r[1], "time": r[2], "sender": r[3], "is_otp": r[4]} for r in rows])
 
 @app.route("/api/send", methods=["POST"])
 def send_message():
-    data = request.get_json()
+    data = request.get_json() or {}
     chat_id = data.get("chat_id")
     text = data.get("text")
 
