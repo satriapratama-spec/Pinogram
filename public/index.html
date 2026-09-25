@@ -18,34 +18,8 @@
             <div>
                 <input type="text" id="token-input" placeholder="Masukkan Token Bot..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 font-mono">
             </div>
-            <button onclick="submitToken()" class="w-full bg-sky-600 hover:bg-sky-500 py-3 rounded-xl font-semibold transition text-sm">Berikutnya</button>
-            <p id="token-error" class="text-red-400 text-xs text-center hidden">Token salah atau gagal mengirim OTP!</p>
-        </div>
-    </div>
-
-    <!-- PAGE 2: INPUT OTP + INFO TOKEN -->
-    <div id="page-otp" class="hidden w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
-        <div class="text-center mb-6">
-            <h1 class="text-2xl font-bold text-sky-400">🔑 Verifikasi OTP</h1>
-            <p class="text-xs text-slate-400 mt-1">Kode telah dikirim ke Grup Telegram</p>
-        </div>
-        
-        <!-- Info Token Tersamar ala Telegram -->
-        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4 flex items-center justify-between">
-            <div>
-                <div class="text-[10px] text-slate-500 uppercase font-semibold">Token Bot Terhubung</div>
-                <div id="masked-token" class="text-xs font-mono text-sky-400 mt-0.5">xxxxxxxx</div>
-            </div>
-            <button onclick="backToToken()" class="text-xs text-slate-400 hover:text-white underline">Ubah</button>
-        </div>
-
-        <div class="space-y-4">
-            <div>
-                <input type="text" id="otp-input" placeholder="Masukkan 4 Digit OTP" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-widest text-lg font-mono focus:outline-none focus:border-emerald-500">
-            </div>
-            <button onclick="verifyOtp()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-semibold transition text-sm">Masuk</button>
-            <p id="otp-error" class="text-red-400 text-xs text-center hidden">Kode OTP salah!</p>
-            <button onclick="resendOtp()" class="w-full text-center text-xs text-slate-500 hover:underline mt-2">Kirim Ulang OTP ke Grup</button>
+            <button onclick="submitToken()" class="w-full bg-sky-600 hover:bg-sky-500 py-3 rounded-xl font-semibold transition text-sm">Masuk</button>
+            <p id="token-error" class="text-red-400 text-xs text-center hidden">Token bot tidak valid!</p>
         </div>
     </div>
 
@@ -73,9 +47,9 @@
 
     <script>
         let currentChatId = null;
-        let activeToken = '';
+        let activeToken = localStorage.getItem('pinogram_token') || '';
 
-        if(localStorage.getItem('pinogram_auth') === 'true') {
+        if(activeToken) {
             showApp();
         }
 
@@ -91,7 +65,7 @@
             }
 
             try {
-                const res = await fetch('/api/request-login-otp', {
+                const res = await fetch('/api/verify-token', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({token})
@@ -100,13 +74,8 @@
                 
                 if(res.ok && data.status === 'success') {
                     activeToken = token;
-                    // Format masked token ala Telegram (misal: 8177708...xxxx)
-                    const masked = token.length > 10 ? token.substring(0, 8) + '...' + token.slice(-4) : token;
-                    document.getElementById('masked-token').innerText = masked;
-                    
-                    // Pindah ke Page 2
-                    document.getElementById('page-token').classList.add('hidden');
-                    document.getElementById('page-otp').classList.remove('hidden');
+                    localStorage.setItem('pinogram_token', token);
+                    showApp();
                 } else {
                     errEl.innerText = data.message || "Token salah!";
                     errEl.classList.remove('hidden');
@@ -117,54 +86,13 @@
             }
         }
 
-        async function verifyOtp() {
-            const otp = document.getElementById('otp-input').value.trim();
-            const errEl = document.getElementById('otp-error');
-            errEl.classList.add('hidden');
-
-            try {
-                const res = await fetch('/api/verify-login-otp', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({otp})
-                });
-                if(res.ok) {
-                    localStorage.setItem('pinogram_auth', 'true');
-                    showApp();
-                } else {
-                    errEl.classList.remove('hidden');
-                }
-            } catch(e) { 
-                errEl.classList.remove('hidden'); 
-            }
-        }
-
-        async function resendOtp() {
-            try {
-                const res = await fetch('/api/resend-otp', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({token: activeToken})
-                });
-                const data = await res.json();
-                alert(data.message || "OTP dikirim ulang ke grup!");
-            } catch(e) { alert("Gagal mengirim ulang OTP"); }
-        }
-
-        function backToToken() {
-            document.getElementById('page-otp').classList.add('hidden');
-            document.getElementById('page-token').classList.remove('hidden');
-            document.getElementById('otp-input').value = '';
-        }
-
         function logout() {
-            localStorage.removeItem('pinogram_auth');
+            localStorage.removeItem('pinogram_token');
             location.reload();
         }
 
         function showApp() {
             document.getElementById('page-token').classList.add('hidden');
-            document.getElementById('page-otp').classList.add('hidden');
             document.getElementById('app-page').classList.remove('hidden');
             loadChats();
         }
@@ -177,7 +105,7 @@
                 listEl.innerHTML = '';
                 
                 if (chats.length === 0) {
-                    listEl.innerHTML = `<div class="p-4 text-xs text-slate-500 text-center">Menunggu pesan OTP masuk dari grup target...</div>`;
+                    listEl.innerHTML = `<div class="p-4 text-xs text-slate-500 text-center">Belum ada riwayat chat/pesan masuk...</div>`;
                     return;
                 }
 
@@ -235,7 +163,7 @@
             await fetch('/api/send', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({chat_id: currentChatId, text})
+                body: JSON.stringify({chat_id: currentChatId, text, token: activeToken})
             });
 
             input.value = '';
@@ -243,7 +171,7 @@
         }
 
         setInterval(() => {
-            if(localStorage.getItem('pinogram_auth') === 'true') {
+            if(localStorage.getItem('pinogram_token')) {
                 loadChats();
                 if(currentChatId) loadMessages();
             }
