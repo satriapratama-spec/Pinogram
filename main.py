@@ -1,12 +1,13 @@
 import os
 import re
 import sqlite3
+import random
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="public", static_url_path="")
 
-# KONFIGURASI UTAMA (TIDAK BOLEH HILANG BUAT OTP & KEAMANAN)
+# KONFIGURASI UTAMA
 BOT_TOKEN = "8177708983:AAFb_47Nv0qakggXC6ZXoyaGjn54fNXkA5U"
 OWNER_ID = 8338766322
 TARGET_GROUP_ID = -1004418845797
@@ -26,10 +27,34 @@ def init_db():
                     is_otp INTEGER DEFAULT 0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS login_otp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    otp_code TEXT
+                )''')
     conn.commit()
     conn.close()
 
 init_db()
+
+# Kirim OTP ke grup secara otomatis pas backend nyala / restart
+def send_startup_otp():
+    otp_code = str(random.randint(1000, 9999))
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM login_otp")
+    c.execute("INSERT INTO login_otp (otp_code) VALUES (?)", (otp_code,))
+    conn.commit()
+    conn.close()
+
+    message_text = f"🔐 *Pinogram Login OTP*\n\nKode verifikasi panel kamu: `{otp_code}`"
+    payload = {
+        "chat_id": TARGET_GROUP_ID,
+        "text": message_text,
+        "parse_mode": "Markdown"
+    }
+    requests.post(f"{TELEGRAM_API}/sendMessage", json=payload)
+
+send_startup_otp()
 
 def check_is_otp(text):
     if not text:
@@ -52,16 +77,30 @@ def save_message(chat_id, sender_name, text, direction):
 def index():
     return send_from_directory("public", "index.html")
 
-# API Login Web mencocokkan Token Utama
-@app.route("/api/login", methods=["POST"])
-def api_login():
-    data = request.get_json()
-    token = data.get("token", "").strip()
-    if token == BOT_TOKEN:
-        return jsonify({"status": "success"})
-    return jsonify({"status": "failed", "message": "Token salah!"}), 401
+# Endpoint buat minta kirim ulang OTP ke grup kalau kelupaan/expired
+@app.route("/api/resend-otp", methods=["POST"])
+def resend_otp():
+    send_startup_otp()
+    return jsonify({"status": "success", "message": "OTP baru dikirim ke grup!"})
 
-# Webhook Telegram (Difilter ketat khusus Target Grup & Owner ID)
+# Verifikasi OTP yang diinput user
+@app.route("/api/verify-login-otp", methods=["POST"])
+def verify_login_otp():
+    data = request.get_json()
+    otp_input = data.get("otp", "").strip()
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT otp_code FROM login_otp ORDER BY id DESC LIMIT 1")
+    row = c.fetchone()
+    conn.close()
+
+    if row and row[0] == otp_input:
+        return jsonify({"status": "success"})
+
+    return jsonify({"status": "failed", "message": "Kode OTP salah!"}), 400
+
+# Webhook Telegram
 @app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
     data = request.get_json()
@@ -73,7 +112,6 @@ def telegram_webhook():
         sender_name = sender.get("first_name", "Unknown")
         text = msg.get("text", "[Media / Non-Text]")
 
-        # FILTER UTAMA: Hanya catat jika dari Target Grup atau Owner ID
         if chat_id == TARGET_GROUP_ID or sender.get("id") == OWNER_ID:
             save_message(chat_id, f"{sender_name} ({'Grup' if chat_id < 0 else 'Private'})", text, "in")
 
