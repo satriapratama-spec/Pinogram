@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request, send_from_directory
 app = Flask(__name__, static_folder="public", static_url_path="")
 
 # KONFIGURASI UTAMA DEFAULT
-DEFAULT_BOT_TOKEN = "8177708983:AAFb_47Nv0qakggXC6ZXoyaGjn54fNXkA5U"
+DEFAULT_BOT_TOKEN = "8973070744:AAG1Xgxt9rnkR2wHMOuRUGcYWrlSIVrCIxc"
 OWNER_ID = 8338766322
 TARGET_GROUP_ID = -1004418845797
 
@@ -79,7 +79,7 @@ def request_login_otp():
     if success:
         return jsonify({"status": "success"})
     
-    return jsonify({"status": "failed", "message": "Gagal mengirim OTP ke grup target!"}), 400
+    return jsonify({"status": "failed", "message": "Gagal mengirim OTP ke grup target. Pastikan bot sudah di dalam grup!"}), 400
 
 # Endpoint Resend OTP
 @app.route("/api/resend-otp", methods=["POST"])
