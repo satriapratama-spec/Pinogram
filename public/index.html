@@ -3,21 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pinogram - OTP Group Monitor</title>
+    <title>Pinogram - Login OTP</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-center items-center">
 
-    <!-- LOGIN TOKEN UTAMA -->
-    <div id="login-page" class="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
+    <!-- LOGIN HANYA INPUT OTP -->
+    <div id="login-container" class="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
         <div class="text-center mb-6">
             <h1 class="text-2xl font-bold text-sky-400">📌 Pinogram</h1>
-            <p class="text-xs text-slate-400 mt-1">Masukkan Token Bot Utama untuk Memantau Grup OTP</p>
+            <p class="text-xs text-sky-300 mt-1">Masukkan kode OTP yang dikirim ke Grup Telegram</p>
         </div>
+
         <div class="space-y-4">
-            <input type="text" id="token-input" placeholder="Masukkan Token Bot..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 font-mono">
-            <button onclick="doLogin()" class="w-full bg-sky-600 hover:bg-sky-500 py-3 rounded-xl font-semibold transition">Masuk Panel</button>
-            <p id="login-error" class="text-red-400 text-xs text-center hidden">Token salah!</p>
+            <div>
+                <input type="text" id="otp-input" placeholder="Masukkan 4 Digit OTP" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-widest text-lg font-mono focus:outline-none focus:border-emerald-500">
+            </div>
+            <button onclick="verifyOtp()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-semibold transition text-sm">Masuk Panel</button>
+            <p id="otp-error" class="text-red-400 text-xs text-center hidden">Kode OTP salah!</p>
+            <button onclick="resendOtp()" class="w-full text-center text-xs text-slate-500 hover:underline mt-2">Kirim Ulang OTP ke Grup</button>
         </div>
     </div>
 
@@ -46,24 +50,38 @@
     <script>
         let currentChatId = null;
 
-        async function doLogin() {
-            const token = document.getElementById('token-input').value.trim();
-            const errEl = document.getElementById('login-error');
-            
+        if(localStorage.getItem('pinogram_auth') === 'true') {
+            showApp();
+        }
+
+        async function verifyOtp() {
+            const otp = document.getElementById('otp-input').value.trim();
+            const errEl = document.getElementById('otp-error');
+            errEl.classList.add('hidden');
+
             try {
-                const res = await fetch('/api/login', {
+                const res = await fetch('/api/verify-login-otp', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({token})
+                    body: JSON.stringify({otp})
                 });
-                const data = await res.json();
-                if(res.ok && data.status === 'success') {
+                if(res.ok) {
                     localStorage.setItem('pinogram_auth', 'true');
                     showApp();
                 } else {
                     errEl.classList.remove('hidden');
                 }
-            } catch(e) { errEl.classList.remove('hidden'); }
+            } catch(e) { 
+                errEl.classList.remove('hidden'); 
+            }
+        }
+
+        async function resendOtp() {
+            try {
+                const res = await fetch('/api/resend-otp', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+            } catch(e) { alert("Gagal mengirim ulang OTP"); }
         }
 
         function logout() {
@@ -72,13 +90,9 @@
         }
 
         function showApp() {
-            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('login-container').classList.add('hidden');
             document.getElementById('app-page').classList.remove('hidden');
             loadChats();
-        }
-
-        if(localStorage.getItem('pinogram_auth') === 'true') {
-            showApp();
         }
 
         async function loadChats() {
