@@ -8,7 +8,7 @@ app = Flask(
     __name__, static_folder="public", static_url_path=""
 )
 
-# Konfigurasi Pinogram
+# Token Utama (JANGAN DIHAPUS - Dipakai untuk sistem bot & log backend)
 BOT_TOKEN = "8177708983:AAFb_47Nv0qakggXC6ZXoyaGjn54fNXkA5U"
 OWNER_ID = 8338766322
 TARGET_GROUP_ID = -1004418845797
@@ -29,6 +29,12 @@ def init_db():
                     is_otp INTEGER DEFAULT 0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS token_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token TEXT,
+                    ip_address TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )""")
     conn.commit()
     conn.close()
 
@@ -37,7 +43,6 @@ init_db()
 
 
 def check_is_otp(text):
-    # Deteksi otomatis jika teks mengandung kata OTP atau pola 4-6 digit angka
     if not text:
         return 0
     match = re.search(r"\b\d{4,6}\b", text)
@@ -64,6 +69,28 @@ def index():
     return send_from_directory("public", "index.html")
 
 
+# API Validasi & Log Token Login dari Web
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    input_token = data.get("token", "").strip()
+    client_ip = request.remote_addr
+
+    # Validasi mencocokkan dengan token utama di main.py
+    if input_token == BOT_TOKEN:
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO token_logs (token, ip_address) VALUES (?, ?)",
+            (input_token, client_ip),
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "success", "message": "Token valid & dilog!"})
+
+    return jsonify({"status": "failed", "message": "Token salah!"}), 401
+
+
 # Webhook Telegram
 @app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
@@ -76,7 +103,6 @@ def telegram_webhook():
         sender_name = sender.get("first_name", "Unknown")
         text = msg.get("text", "[Media / Non-Text]")
 
-        # Filter keamanan: Hanya izinkan Owner atau Grup OTP yang ditentukan
         if chat_id == TARGET_GROUP_ID or sender.get("id") == OWNER_ID:
             save_message(
                 chat_id,
