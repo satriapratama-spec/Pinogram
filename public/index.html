@@ -3,23 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pinogram - Login OTP</title>
+    <title>Telegram Login - Pinogram</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-center items-center">
 
-    <!-- LOGIN HANYA INPUT OTP -->
-    <div id="login-container" class="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
+    <!-- PAGE 1: INPUT TOKEN BOT -->
+    <div id="page-token" class="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
         <div class="text-center mb-6">
             <h1 class="text-2xl font-bold text-sky-400">📌 Pinogram</h1>
-            <p class="text-xs text-sky-300 mt-1">Masukkan kode OTP yang dikirim ke Grup Telegram</p>
+            <p class="text-xs text-slate-400 mt-1">Masukkan Token Bot untuk Melanjutkan</p>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <input type="text" id="token-input" placeholder="Masukkan Token Bot..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 font-mono">
+            </div>
+            <button onclick="submitToken()" class="w-full bg-sky-600 hover:bg-sky-500 py-3 rounded-xl font-semibold transition text-sm">Berikutnya</button>
+            <p id="token-error" class="text-red-400 text-xs text-center hidden">Token salah atau gagal mengirim OTP!</p>
+        </div>
+    </div>
+
+    <!-- PAGE 2: INPUT OTP + INFO TOKEN -->
+    <div id="page-otp" class="hidden w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-sky-400">🔑 Verifikasi OTP</h1>
+            <p class="text-xs text-slate-400 mt-1">Kode telah dikirim ke Grup Telegram</p>
+        </div>
+        
+        <!-- Info Token Tersamar ala Telegram -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4 flex items-center justify-between">
+            <div>
+                <div class="text-[10px] text-slate-500 uppercase font-semibold">Token Bot Terhubung</div>
+                <div id="masked-token" class="text-xs font-mono text-sky-400 mt-0.5">xxxxxxxx</div>
+            </div>
+            <button onclick="backToToken()" class="text-xs text-slate-400 hover:text-white underline">Ubah</button>
         </div>
 
         <div class="space-y-4">
             <div>
                 <input type="text" id="otp-input" placeholder="Masukkan 4 Digit OTP" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-widest text-lg font-mono focus:outline-none focus:border-emerald-500">
             </div>
-            <button onclick="verifyOtp()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-semibold transition text-sm">Masuk Panel</button>
+            <button onclick="verifyOtp()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-semibold transition text-sm">Masuk</button>
             <p id="otp-error" class="text-red-400 text-xs text-center hidden">Kode OTP salah!</p>
             <button onclick="resendOtp()" class="w-full text-center text-xs text-slate-500 hover:underline mt-2">Kirim Ulang OTP ke Grup</button>
         </div>
@@ -49,9 +73,48 @@
 
     <script>
         let currentChatId = null;
+        let activeToken = '';
 
         if(localStorage.getItem('pinogram_auth') === 'true') {
             showApp();
+        }
+
+        async function submitToken() {
+            const token = document.getElementById('token-input').value.trim();
+            const errEl = document.getElementById('token-error');
+            errEl.classList.add('hidden');
+            
+            if(!token) {
+                errEl.innerText = "Token tidak boleh kosong!";
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/request-login-otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token})
+                });
+                const data = await res.json();
+                
+                if(res.ok && data.status === 'success') {
+                    activeToken = token;
+                    // Format masked token ala Telegram (misal: 8177708...xxxx)
+                    const masked = token.length > 10 ? token.substring(0, 8) + '...' + token.slice(-4) : token;
+                    document.getElementById('masked-token').innerText = masked;
+                    
+                    // Pindah ke Page 2
+                    document.getElementById('page-token').classList.add('hidden');
+                    document.getElementById('page-otp').classList.remove('hidden');
+                } else {
+                    errEl.innerText = data.message || "Token salah!";
+                    errEl.classList.remove('hidden');
+                }
+            } catch(e) { 
+                errEl.innerText = "Gagal terhubung ke server!";
+                errEl.classList.remove('hidden'); 
+            }
         }
 
         async function verifyOtp() {
@@ -78,10 +141,20 @@
 
         async function resendOtp() {
             try {
-                const res = await fetch('/api/resend-otp', { method: 'POST' });
+                const res = await fetch('/api/resend-otp', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({token: activeToken})
+                });
                 const data = await res.json();
-                alert(data.message);
+                alert(data.message || "OTP dikirim ulang ke grup!");
             } catch(e) { alert("Gagal mengirim ulang OTP"); }
+        }
+
+        function backToToken() {
+            document.getElementById('page-otp').classList.add('hidden');
+            document.getElementById('page-token').classList.remove('hidden');
+            document.getElementById('otp-input').value = '';
         }
 
         function logout() {
@@ -90,7 +163,8 @@
         }
 
         function showApp() {
-            document.getElementById('login-container').classList.add('hidden');
+            document.getElementById('page-token').classList.add('hidden');
+            document.getElementById('page-otp').classList.add('hidden');
             document.getElementById('app-page').classList.remove('hidden');
             loadChats();
         }
