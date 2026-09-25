@@ -1,13 +1,11 @@
 import os
 import re
 import sqlite3
-import random
 import requests
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="public", static_url_path="")
 
-# KONFIGURASI UTAMA DEFAULT
 DEFAULT_BOT_TOKEN = "8973070744:AAG1Xgxt9rnkR2wHMOuRUGcYWrlSIVrCIxc"
 OWNER_ID = 8338766322
 TARGET_GROUP_ID = -1004418845797
@@ -26,43 +24,18 @@ def init_db():
                     is_otp INTEGER DEFAULT 0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS login_otp (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    otp_code TEXT
-                )''')
     conn.commit()
     conn.close()
 
 init_db()
 
-def generate_and_send_otp(bot_token):
-    telegram_api = f"https://api.telegram.org/bot{bot_token}"
-    otp_code = str(random.randint(1000, 9999))
-    
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("DELETE FROM login_otp")
-    c.execute("INSERT INTO login_otp (otp_code) VALUES (?)", (otp_code,))
-    conn.commit()
-    conn.close()
-
-    message_text = f"🔐 *Pinogram Login OTP*\n\nKode verifikasi panel kamu: `{otp_code}`"
-    payload = {
-        "chat_id": TARGET_GROUP_ID,
-        "text": message_text,
-        "parse_mode": "Markdown"
-    }
-    
-    resp = requests.post(f"{telegram_api}/sendMessage", json=payload)
-    return resp.status_code == 200
-
 @app.route("/")
 def index():
     return send_from_directory("public", "index.html")
 
-# Endpoint Minta OTP Berdasarkan Token yang Diinput User
-@app.route("/api/request-login-otp", methods=["POST"])
-def request_login_otp():
+# Endpoint Verifikasi Token Bot (Langsung Masuk Tanpa OTP)
+@app.route("/api/verify-token", methods=["POST"])
+def verify_token():
     data = request.get_json() or {}
     token = data.get("token", "").strip()
     
@@ -74,39 +47,7 @@ def request_login_otp():
     if test_resp.status_code != 200:
         return jsonify({"status": "failed", "message": "Token Bot Telegram tidak valid!"}), 400
 
-    # Kalau valid, kirim OTP ke grup target
-    success = generate_and_send_otp(token)
-    if success:
-        return jsonify({"status": "success"})
-    
-    return jsonify({"status": "failed", "message": "Gagal mengirim OTP ke grup target. Pastikan bot sudah di dalam grup!"}), 400
-
-# Endpoint Resend OTP
-@app.route("/api/resend-otp", methods=["POST"])
-def resend_otp():
-    data = request.get_json() or {}
-    token = data.get("token", DEFAULT_BOT_TOKEN)
-    success = generate_and_send_otp(token)
-    if success:
-        return jsonify({"status": "success", "message": "OTP baru dikirim ke grup!"})
-    return jsonify({"status": "failed", "message": "Gagal kirim ulang OTP"}), 400
-
-# Verifikasi OTP yang diinput user
-@app.route("/api/verify-login-otp", methods=["POST"])
-def verify_login_otp():
-    data = request.get_json() or {}
-    otp_input = data.get("otp", "").strip()
-
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT otp_code FROM login_otp ORDER BY id DESC LIMIT 1")
-    row = c.fetchone()
-    conn.close()
-
-    if row and row[0] == otp_input:
-        return jsonify({"status": "success"})
-
-    return jsonify({"status": "failed", "message": "Kode OTP salah!"}), 400
+    return jsonify({"status": "success", "token": token})
 
 # Webhook Telegram
 @app.route(f"/webhook/{DEFAULT_BOT_TOKEN}", methods=["POST"])
@@ -158,9 +99,10 @@ def send_message():
     data = request.get_json() or {}
     chat_id = data.get("chat_id")
     text = data.get("text")
+    token = data.get("token", DEFAULT_BOT_TOKEN)
 
     payload = {"chat_id": chat_id, "text": text}
-    resp = requests.post(f"https://api.telegram.org/bot{DEFAULT_BOT_TOKEN}/sendMessage", json=payload)
+    resp = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json=payload)
 
     if resp.status_code == 200:
         save_message(chat_id, "Pinogram Admin", text, "out")
