@@ -3,38 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pinogram - OTP Dashboard & Telegram Web</title>
+    <title>Pinogram - Login Token</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 h-screen flex overflow-hidden">
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-center items-center">
 
-    <!-- Sidebar Chat List -->
-    <div class="w-1/3 border-r border-slate-800 flex flex-col bg-slate-950">
-        <div class="p-4 border-b border-slate-800 font-bold text-xl text-sky-400 flex items-center justify-between">
-            <span>📌 Pinogram</span>
-            <span class="text-xs bg-sky-950 text-sky-300 px-2 py-1 rounded border border-sky-800">OTP Active</span>
+    <!-- PAGE LOGIN TOKEN -->
+    <div id="login-page" class="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl mx-4">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-sky-400">📌 Pinogram</h1>
+            <p class="text-xs text-slate-400 mt-1">Masukkan Token Bot Telegram untuk Akses & Log</p>
         </div>
-        <div id="chat-list" class="overflow-y-auto flex-1 divide-y divide-slate-900">
-            <!-- List chat dimuat via JS -->
+        <div class="space-y-4">
+            <input type="text" id="token-input" placeholder="Masukkan Token Bot..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 font-mono">
+            <button onclick="doLogin()" class="w-full bg-sky-600 hover:bg-sky-500 py-3 rounded-xl font-semibold transition">Masuk Panel</button>
+            <p id="login-error" class="text-red-400 text-xs text-center hidden">Token salah atau gagal diverifikasi!</p>
         </div>
     </div>
 
-    <!-- Main Chat Area -->
-    <div class="w-2/3 flex flex-col bg-slate-900">
-        <div id="chat-header" class="p-4 border-b border-slate-800 font-semibold bg-slate-950">
-            Pilih chat di sebelah kiri
+    <!-- MAIN APP (Hidden sebelum login sukses) -->
+    <div id="app-page" class="hidden w-full h-screen flex flex-col md:flex-row bg-slate-900 overflow-hidden">
+        <!-- Sidebar Chat List -->
+        <div class="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col bg-slate-950 h-1/3 md:h-full">
+            <div class="p-3 border-b border-slate-800 font-bold text-lg text-sky-400 flex items-center justify-between">
+                <span>📌 Pinogram</span>
+                <button onclick="logout()" class="text-xs text-red-400 hover:underline">Keluar</button>
+            </div>
+            <div id="chat-list" class="overflow-y-auto flex-1 divide-y divide-slate-900"></div>
         </div>
-        <div id="message-container" class="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col">
-            <div class="text-center text-slate-500 my-auto">Belum ada chat yang dipilih</div>
-        </div>
-        <div id="input-area" class="p-4 border-t border-slate-800 bg-slate-950 hidden flex gap-2">
-            <input type="text" id="message-input" placeholder="Ketik pesan atau balasan..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:outline-none focus:border-sky-500">
-            <button onclick="sendMessage()" class="bg-sky-600 hover:bg-sky-500 px-5 py-2 rounded-lg font-medium transition">Kirim</button>
+
+        <!-- Main Chat Area -->
+        <div class="w-full md:w-2/3 flex flex-col bg-slate-900 h-2/3 md:h-full">
+            <div id="chat-header" class="p-3 border-b border-slate-800 font-semibold text-sm bg-slate-950 text-slate-300">
+                Pilih chat di samping
+            </div>
+            <div id="message-container" class="flex-1 p-3 overflow-y-auto space-y-3 flex flex-col">
+                <div class="text-center text-slate-500 my-auto text-sm">Belum ada chat dipilih</div>
+            </div>
+            <div id="input-area" class="p-3 border-t border-slate-800 bg-slate-950 hidden flex gap-2">
+                <input type="text" id="message-input" placeholder="Ketik pesan atau balasan..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500">
+                <button onclick="sendMessage()" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded-lg font-medium text-sm transition">Kirim</button>
+            </div>
         </div>
     </div>
 
     <script>
         let currentChatId = null;
+
+        async function doLogin() {
+            const token = document.getElementById('token-input').value.trim();
+            const errorEl = document.getElementById('login-error');
+            
+            if (!token) {
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    localStorage.setItem('pinogram_logged', 'true');
+                    showApp();
+                } else {
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Login error:", err);
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('pinogram_logged');
+            location.reload();
+        }
+
+        function showApp() {
+            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('app-page').classList.remove('hidden');
+            loadChats();
+        }
+
+        // Cek status sesi lokal
+        if (localStorage.getItem('pinogram_logged') === 'true') {
+            showApp();
+        }
 
         async function loadChats() {
             try {
@@ -50,20 +109,18 @@
 
                 chats.forEach(chat => {
                     listEl.innerHTML += `
-                        <div onclick="selectChat('${chat.chat_id}', '${chat.name}')" class="p-4 hover:bg-slate-900 cursor-pointer transition border-l-4 border-transparent hover:border-sky-500">
-                            <div class="font-semibold text-sm">${chat.name}</div>
-                            <div class="text-[11px] text-slate-500">ID: ${chat.chat_id}</div>
+                        <div onclick="selectChat('${chat.chat_id}', '${chat.name}')" class="p-3 hover:bg-slate-900 cursor-pointer transition border-l-4 border-transparent hover:border-sky-500">
+                            <div class="font-semibold text-sm truncate">${chat.name}</div>
+                            <div class="text-[10px] text-slate-500">ID: ${chat.chat_id}</div>
                         </div>
                     `;
                 });
-            } catch (err) {
-                console.error("Gagal memuat chat:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         async function selectChat(chatId, name) {
             currentChatId = chatId;
-            document.getElementById('chat-header').innerText = `Target: ${name} (${chatId})`;
+            document.getElementById('chat-header').innerText = `Target: ${name}`;
             document.getElementById('input-area').classList.remove('hidden');
             loadMessages();
         }
@@ -78,25 +135,22 @@
 
                 msgs.forEach(m => {
                     const isOut = m.direction === 'out';
-                    const otpBadge = m.is_otp ? `<span class="bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded ml-2">🔑 OTP DETECTED</span>` : '';
+                    const otpBadge = m.is_otp ? `<span class="bg-amber-500 text-black text-[9px] font-bold px-1.5 py-0.5 rounded ml-1">🔑 OTP</span>` : '';
                     
                     container.innerHTML += `
                         <div class="flex flex-col ${isOut ? 'items-end' : 'items-start'}">
-                            <div class="max-w-md rounded-2xl px-4 py-2 text-sm ${isOut ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-200'} shadow">
-                                <div class="text-[10px] text-slate-300 font-semibold mb-1 flex items-center justify-between">
-                                    <span>${m.sender}</span>
-                                    ${otpBadge}
+                            <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm ${isOut ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-200'} shadow">
+                                <div class="text-[9px] text-slate-300 font-semibold mb-0.5 flex items-center justify-between">
+                                    <span>${m.sender}</span> ${otpBadge}
                                 </div>
-                                <div class="font-mono text-base tracking-wide">${m.text}</div>
-                                <div class="text-[9px] text-right text-slate-400 mt-1">${m.time}</div>
+                                <div class="font-mono text-base tracking-wide break-all">${m.text}</div>
+                                <div class="text-[8px] text-right text-slate-400 mt-0.5">${m.time}</div>
                             </div>
                         </div>
                     `;
                 });
                 container.scrollTop = container.scrollHeight;
-            } catch (err) {
-                console.error("Gagal memuat pesan:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         async function sendMessage() {
@@ -115,11 +169,11 @@
         }
 
         setInterval(() => {
-            loadChats();
-            if (currentChatId) loadMessages();
+            if (localStorage.getItem('pinogram_logged') === 'true') {
+                loadChats();
+                if (currentChatId) loadMessages();
+            }
         }, 3000);
-
-        loadChats();
     </script>
 </body>
 </html>
